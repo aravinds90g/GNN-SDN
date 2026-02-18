@@ -1,206 +1,144 @@
-# Phase 4: SDN Integration - Complete Guide
+# SDN Integration - GNN-Based IoT Security
 
-## 🎯 Overview
+## Overview
 
-This phase integrates your GNN attack detection model with an SDN (Software-Defined Networking) controller to automatically block malicious IoT devices at the network level.
+This module integrates the GNN attack detection model with an SDN (Software-Defined Networking) controller to automatically block malicious IoT devices at the network level.
 
-**Architecture:**
 ```
 Mininet (Network Simulation)
     ↓ traffic flows
 OpenFlow Switch
     ↓ flow statistics
-Ryu Controller (SDN)
+os-ken/Ryu Controller (SDN)
     ↑ blocking rules
 GNN Model (Detection)
     ↑ network data
 ```
 
-## 📁 Files Created
+---
 
-### SDN Components
-- **`sdn/iot_topology.py`** - Mininet network topology with IoT devices
-- **`sdn/ryu_blocker.py`** - Ryu SDN controller with blocking logic
-- **`sdn/gnn_alert_sender.py`** - Alert communication module
-- **`sdn/gnn_sdn_detection.py`** - Integrated detection & blocking script
-- **`sdn/test_integration.py`** - Test suite for the integration
-- **`sdn/setup_sdn.sh`** - Installation script
+## Files
 
-## 🚀 Quick Start
+| File | Description |
+|---|---|
+| `ryu_blocker.py` | SDN controller with REST API for blocking IPs |
+| `iot_topology.py` | Mininet network topology with IoT devices |
+| `gnn_sdn_detection.py` | Integrated GNN detection + SDN blocking script |
+| `gnn_alert_sender.py` | Alert communication module |
+| `test_integration.py` | Test suite for the integration |
+| `run_controller.py` | Entry point to start the SDN controller |
+| `setup_sdn.sh` | Dependency installation script |
+| `install_osken.sh` | Installs os-ken (Python 3.12+ compatible Ryu fork) |
+| `quick_start.sh` | Quick start helper script |
+| `COMMANDS.sh` | Reference command list |
 
-### Step 1: Install Dependencies
+---
+
+## Setup
+
+### 1. Install Dependencies
 
 ```bash
-cd /mnt/3A7069D670699981/Aravind/FinalYearProject/archive
+cd Project
 chmod +x sdn/setup_sdn.sh
 ./sdn/setup_sdn.sh
 ```
 
-This installs:
-- Mininet (network emulator)
-- Ryu (SDN controller)
-- Required Python packages
+> **Note on Ryu / os-ken**: The official `ryu` package has compatibility issues with Python 3.12+.
+> Use **os-ken** instead — a maintained OpenStack fork that is fully API-compatible:
+> ```bash
+> pip install os-ken
+> ```
+> Verify: `python -c "import os_ken; print(os_ken.__version__)"`
 
-### Step 2: Start the System (3 Terminals)
+---
 
-**Terminal 1 - Start Ryu Controller:**
+## Running the System (3 Terminals)
+
+**Terminal 1 — SDN Controller:**
 ```bash
-cd /mnt/3A7069D670699981/Aravind/FinalYearProject/archive
-ryu-manager sdn/ryu_blocker.py
+cd Project
+source venv/bin/activate
+python sdn/run_controller.py
+```
+Wait for the "loading application" message before proceeding.
+
+**Terminal 2 — Mininet Network:**
+```bash
+cd Project
+sudo python3 sdn/iot_topology.py
 ```
 
-**Terminal 2 - Start Mininet Network:**
+**Terminal 3 — GNN Detection:**
 ```bash
-cd /mnt/3A7069D670699981/Aravind/FinalYearProject/archive
-sudo python sdn/iot_topology.py
-```
-
-**Terminal 3 - Run GNN Detection:**
-```bash
-cd /mnt/3A7069D670699981/Aravind/FinalYearProject/archive
+cd Project
+source venv/bin/activate
 python sdn/gnn_sdn_detection.py --data test_preprocessed.csv
 ```
 
-### Step 3: Test Blocking
+---
+
+## Testing
 
 In the Mininet CLI (Terminal 2):
 ```bash
-# Test if malicious device (h3) is blocked
-mininet> h3 ping h1
-# Should show: packets dropped ❌
-
-# Test normal communication
-mininet> h1 ping h2
-# Should work ✅
+mininet> h3 ping h1    # Should be BLOCKED ❌
+mininet> h1 ping h2    # Should WORK ✅
 ```
 
-## 🧪 Testing
-
-### Test the Integration
+Run the integration test suite:
 ```bash
-# First, start Ryu controller in another terminal
-ryu-manager sdn/ryu_blocker.py
-
-# Then run tests
 python sdn/test_integration.py
 ```
 
-### Test Alert Sender
+---
+
+## REST API (SDN Controller — Port 8080)
+
+| Method | Endpoint | Description |
+|---|---|---|
+| POST | `/alert` | Block an IP |
+| GET | `/status` | List blocked IPs |
+| POST | `/unblock` | Unblock an IP |
+
+**Example:**
 ```bash
-python sdn/gnn_alert_sender.py
-```
-
-## 🔧 How It Works
-
-### 1. Network Topology
-- **4 IoT devices** (h1, h2, h3, h4) connected to an OpenFlow switch
-- **h3** (192.168.1.5) is the potentially malicious device
-- Switch connects to Ryu controller via OpenFlow protocol
-
-### 2. GNN Detection
-- Analyzes network flow data
-- Predicts malicious vs normal behavior
-- Maps detected nodes to IP addresses
-
-### 3. SDN Blocking
-- GNN sends alert to Ryu via REST API
-- Ryu installs OpenFlow drop rules
-- Traffic from/to malicious IP is blocked
-
-### 4. REST API Endpoints
-
-**POST /alert** - Block an IP
-```bash
+# Block a device
 curl -X POST http://127.0.0.1:8080/alert \
   -H "Content-Type: application/json" \
   -d '{"ip": "192.168.1.5"}'
-```
 
-**GET /status** - Check blocked IPs
-```bash
+# Check blocked IPs
 curl http://127.0.0.1:8080/status
 ```
 
-**POST /unblock** - Unblock an IP
-```bash
-curl -X POST http://127.0.0.1:8080/unblock \
-  -H "Content-Type: application/json" \
-  -d '{"ip": "192.168.1.5"}'
-```
+---
 
-## 📊 Network Configuration
+## Network Topology
 
-| Device | IP Address    | MAC Address       | Role               |
-|--------|---------------|-------------------|--------------------|
-| h1     | 192.168.1.2   | 00:00:00:00:00:02 | Normal IoT Device  |
-| h2     | 192.168.1.3   | 00:00:00:00:00:03 | Normal IoT Device  |
-| h3     | 192.168.1.5   | 00:00:00:00:00:05 | Malicious Device   |
-| h4     | 192.168.1.6   | 00:00:00:00:00:06 | Normal IoT Device  |
-| s1     | -             | -                 | OpenFlow Switch    |
-| c0     | 127.0.0.1:6633| -                 | Ryu Controller     |
+| Device | IP Address | Role |
+|---|---|---|
+| h1 | 192.168.1.2 | Normal IoT Device |
+| h2 | 192.168.1.3 | Normal IoT Device |
+| h3 | 192.168.1.5 | Malicious Device |
+| h4 | 192.168.1.6 | Normal IoT Device |
+| s1 | — | OpenFlow Switch |
+| c0 | 127.0.0.1:6633 | SDN Controller |
 
-## 🎓 Advanced Usage
+---
 
-### Custom IP Mapping
-Edit `sdn/gnn_sdn_detection.py`:
-```python
-NODE_TO_IP_MAPPING = {
-    0: "192.168.1.2",
-    1: "192.168.1.3",
-    2: "192.168.1.5",  # Your malicious device
-    3: "192.168.1.6",
-}
-```
+## Troubleshooting
 
-### Detection Only (No Blocking)
-```bash
-python sdn/gnn_sdn_detection.py --data test_preprocessed.csv --no-blocking
-```
+**"Cannot connect to SDN controller"**
+- Ensure Terminal 1 is running and shows "loading application"
+- Check port 8080: `lsof -i :8080`
 
-### Different GNN Models
-```bash
-python sdn/gnn_sdn_detection.py --data test_preprocessed.csv --gnn-type GAT
-```
+**"ModuleNotFoundError: No module named 'ryu'"**
+- Use os-ken instead: `pip install os-ken`
+- Run via: `python sdn/run_controller.py` (not `ryu-manager`)
 
-## 🐛 Troubleshooting
+**"sudo: python: command not found"**
+- Use `python3` with sudo: `sudo python3 sdn/iot_topology.py`
 
-### "Cannot connect to SDN controller"
-- Make sure Ryu is running: `ryu-manager sdn/ryu_blocker.py`
-- Check if port 8080 is available: `lsof -i :8080`
-
-### "Mininet: command not found"
-- Run the setup script: `./sdn/setup_sdn.sh`
-- Or install manually: `sudo apt install mininet`
-
-### "Permission denied" for Mininet
-- Mininet requires sudo: `sudo python sdn/iot_topology.py`
-
-### Blocking not working
-1. Check Ryu logs for flow installation
-2. Verify switch connection: Look for "Switch connected" message
-3. Test API manually: `curl http://127.0.0.1:8080/status`
-
-## 🎯 What You've Built
-
-✅ **AI-Driven Security** - GNN automatically detects attacks  
-✅ **Real-Time Mitigation** - Instant blocking of threats  
-✅ **SDN-Controlled** - Centralized network management  
-✅ **Fully Automated** - No manual intervention needed  
-✅ **Research-Grade** - Publication-worthy implementation  
-
-This is a complete **AI-powered network defense system**!
-
-## 📚 Next Steps
-
-1. **Collect Real Data** - Use actual IoT network traffic
-2. **Fine-tune Model** - Improve detection accuracy
-3. **Scale Up** - Add more devices to topology
-4. **Add Monitoring** - Implement real-time dashboards
-5. **Deploy** - Test on real SDN hardware
-
-## 🔗 Related Files
-
-- `train_gnn.py` - GNN training script
-- `graph_builder.py` - Graph construction
-- `gnn_model.py` - Model architectures
-- `preprocess.py` - Data preprocessing
+**"Permission denied" for Mininet**
+- Mininet requires sudo: `sudo python3 sdn/iot_topology.py`
